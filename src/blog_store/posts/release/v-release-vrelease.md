@@ -1,61 +1,62 @@
-V8 release v6.5
+V8 release v8.4
 ===============
 
-Published 01 February 2018 · Tagged with [release](/blog/tags/release)
+Published 30 June 2020 · Tagged with [release](/blog/tags/release)
 
-Every six weeks, we create a new branch of V8 as part of our [release process](/docs/release-process). Each version is branched from V8’s Git master immediately before a Chrome Beta milestone. Today we’re pleased to announce our newest branch, [V8 version 6.5](https://chromium.googlesource.com/v8/v8.git/+log/branch-heads/6.5), which is in beta until its release in coordination with Chrome 65 Stable in several weeks. V8 v6.5 is filled with all sorts of developer-facing goodies. This post provides a preview of some of the highlights in anticipation of the release.
+Every six weeks, we create a new branch of V8 as part of our [release process](https://v8.dev/docs/release-process). Each version is branched from V8’s Git master immediately before a Chrome Beta milestone. Today we’re pleased to announce our newest branch, [V8 version 8.4](https://chromium.googlesource.com/v8/v8.git/+log/branch-heads/8.4), which is in beta until its release in coordination with Chrome 84 Stable in several weeks. V8 v8.4 is filled with all sorts of developer-facing goodies. This post provides a preview of some of the highlights in anticipation of the release.
 
-Untrusted code mode [#](#untrusted-code-mode)
----------------------------------------------
+WebAssembly [#](#webassembly)
+-----------------------------
 
-In response to the latest speculative side-channel attack called Spectre, V8 introduced an [untrusted code mode](/docs/untrusted-code-mitigations). If you embed V8, consider leveraging this mode in case your application processes user-generated, not-trustworthy code. Please note that the mode is enabled by default, including in Chrome.
+### Improved start-up time [#](#improved-start-up-time)
 
-Streaming compilation for WebAssembly code [#](#streaming-compilation-for-webassembly-code)
--------------------------------------------------------------------------------------------
+WebAssembly’s baseline compiler ([Liftoff](https://v8.dev/blog/liftoff)) now supports [atomic instructions](https://github.com/WebAssembly/threads) and [bulk memory operations](https://github.com/WebAssembly/bulk-memory-operations). This means that even if you use these pretty recent spec additions, you get blazingly fast start-up times.
 
-The WebAssembly API provides a special function to support [streaming compilation](https://developers.google.com/web/updates/2018/04/loading-wasm) in combination with the `fetch()` API:
+### Better debugging [#](#better-debugging)
 
-    const module = await WebAssembly.compileStreaming(fetch('foo.wasm'));
+In an ongoing effort to improve the debugging experience in WebAssembly, we are now able to inspect any WebAssembly frame that is live whenever you pause execution or reach a breakpoint.  
+This was realized by re-using [Liftoff](https://v8.dev/blog/liftoff) for debugging. In the past, all code that had breakpoints or was stepped through needed to execute in the WebAssembly interpreter, which slowed down execution substantially (often around 100×). With Liftoff, you only lose about one third of your performance, but you can step through all code and inspect it at any time.
 
-This API has been available since V8 v6.1 and Chrome 61, although the initial implementation didn’t actually use streaming compilation. However, with V8 v6.5 and Chrome 65 we take advantage of this API and compile WebAssembly modules already while we are still downloading the module bytes. As soon as we download all bytes of a single function, we pass the function to a background thread to compile it.
+### SIMD Origin Trial [#](#simd-origin-trial)
 
-Our measurements show that with this API, the WebAssembly compilation in Chrome 65 can keep up with up to 50 Mbit/s download speed on high-end machines. This means that if you download WebAssembly code with 50 Mbit/s, compilation of that code finishes as soon as the download finishes.
+The SIMD proposal enables WebAssembly to take advantage of commonly available hardware vector instructions to accelerate compute intensive workloads. V8 has [support](https://v8.dev/features/simd) for the [WebAssembly SIMD proposal](https://github.com/WebAssembly/simd). To enable this in Chrome, use the flag `chrome://flags/#enable-webassembly-simd` or sign up for an [origin trial](https://developers.chrome.com/origintrials/#/view_trial/-4708513410415853567). [Origin trials](https://github.com/GoogleChrome/OriginTrials/blob/gh-pages/developer-guide.md) allow developers to experiment with a feature before it is standardized, and provide valuable feedback. Once an origin has opted into the trial users are opted into the feature for the duration of the trial period without having to update Chrome flags.
 
-For the graph below we measure the time it takes to download and compile a WebAssembly module with 67 MB and about 190,000 functions. We do the measurements with 25 Mbit/s, 50 Mbit/s, and 100 Mbit/s download speed.
+JavaScript [#](#javascript)
+---------------------------
 
-![](/_img/v8-release-65/wasm-streaming-compilation.svg)
+### Weak references and finalizers [#](#weak-references-and-finalizers)
 
-When the download time is longer than the compile time of the WebAssembly module, e.g. in the graph above with 25 Mbit/s and 50 Mbit/s, then `WebAssembly.compileStreaming()` finishes compilation almost immediately after the last bytes are downloaded.
+**Warning!** Weak references and finalizers are advanced features! They depend on garbage collection behavior. Garbage collection is non-deterministic and may not occur at all.
 
-When the download time is shorter than the compile time, then `WebAssembly.compileStreaming()` takes about as long as it takes to compile the WebAssembly module without downloading the module first.
+JavaScript is a garbage collected language, which means memory occupied by objects that are no longer reachable by the program may be automatically reclaimed when the garbage collector runs. With the exception of references in `WeakMap` and `WeakSet`, all references in JavaScript are strong and prevent the referenced object from being garbage collected. For instance,
 
-Speed [#](#speed)
------------------
+    const globalRef = {  callback() { console.log('foo'); }};// As long as globalRef is reachable through the global scope,// neither it nor the function in its callback property will be collected.
 
-We continued to work on widening the fast-path of JavaScript builtins in general, adding a mechanism to detect and prevent a ruinous situation called a “deoptimization loop.” This occurs when your optimized code deoptimizes, and there is _no way to learn what went wrong_. In such scenarios, TurboFan just keeps trying to optimize, finally giving up after about 30 attempts. This would happen if you did something to alter the shape of the array in the callback function of any of our second order array builtins. For example, changing the `length` of the array — in V8 v6.5, we note when that happens, and stop inlining the array builtin called at that site on future optimization attempts.
+JavaScript programmers can now hold on to objects weakly via the `WeakRef` feature. Objects that are referenced by weak references do not prevent their being garbage collected if they are not also strongly referenced.
 
-We also widened the fast-path by inlining many builtins that were formerly excluded because of a side-effect between the load of the function to call and the call itself, for example a function call. And `String.prototype.indexOf` got a [10× performance improvement in function calls](https://bugs.chromium.org/p/v8/issues/detail?id=6270).
+    const globalWeakRef = new WeakRef({  callback() { console.log('foo'); }});(async function() {  globalWeakRef.deref().callback();  // Logs “foo” to console. globalWeakRef is guaranteed to be alive  // for the first turn of the event loop after it was created.  await new Promise((resolve, reject) => {    setTimeout(() => { resolve('foo'); }, 42);  });  // Wait for a turn of the event loop.  globalWeakRef.deref()?.callback();  // The object inside globalWeakRef may be garbage collected  // after the first turn since it is not otherwise reachable.})();
 
-In V8 v6.4, we’d inlined support for `Array.prototype.forEach`, `Array.prototype.map`, and `Array.prototype.filter`. In V8 v6.5 we’ve added inlining support for:
+The companion feature to `WeakRef`s is `FinalizationRegistry`, which lets programmers register callbacks to be invoked after an object is garbage collected. For example, the program below may log `42` to the console after the unreachable object in the IIFE is collected.
 
-*   `Array.prototype.reduce`
-*   `Array.prototype.reduceRight`
-*   `Array.prototype.find`
-*   `Array.prototype.findIndex`
-*   `Array.prototype.some`
-*   `Array.prototype.every`
+    const registry = new FinalizationRegistry((heldValue) => {  console.log(heldValue);});(function () {  const garbage = {};  registry.register(garbage, 42);  // The second argument is the “held” value which gets passed  // to the finalizer when the first argument is garbage collected.})();
 
-Furthermore, we’ve widened the fast path on all these builtins. At first we would bail out on seeing arrays with floating-point numbers, or (even more bailing out) [if the arrays had “holes” in them](/blog/elements-kinds), e.g. `[3, 4.5, , 6]`. Now, we handle holey floating-point arrays everywhere except in `find` and `findIndex`, where the spec requirement to convert holes into `undefined` throws a monkey-wrench into our efforts (_for now…!_).
+Finalizers are scheduled to run on the event loop and never interrupt synchronous JavaScript execution.
 
-The following image shows the improvement delta compared to V8 v6.4 in our inlined builtins, broken down into integer arrays, double arrays, and double arrays with holes. Time is in milliseconds.
+These are advanced and powerful features, and with any luck, your program won’t need them. Please see our [explainer](https://v8.dev/features/weak-references) to learn more about them!
 
-![](/_img/v8-release-65/performance-improvements.svg)
+### Private methods and accessors [#](#private-methods-and-accessors)
 
-Performance improvements since V8 v6.4
+Private fields, which shipped in v7.4, are rounded out with support for private methods and accessors. Syntactically, the names of private methods and accessors start with `#`, just like private fields. The following is a brief taste of the syntax.
+
+    class Component {  #privateMethod() {    console.log("I'm only callable inside Component!");  }  get #privateAccessor() { return 42; }  set #privateAccessor(x) { }}
+
+Private methods and accessors have the same scoping rules and semantics as private fields. Please see our [explainer](https://v8.dev/features/class-fields) to learn more.
+
+Thanks to [Igalia](https://twitter.com/igalia) for contributing the implementation!
 
 V8 API [#](#v8-api)
 -------------------
 
-Please use `git log branch-heads/6.4..branch-heads/6.5 include/v8.h` to get a list of the API changes.
+Please use `git log branch-heads/8.3..branch-heads/8.4 include/v8.h` to get a list of the API changes.
 
-Developers with an [active V8 checkout](/docs/source-code#using-git) can use `git checkout -b 6.5 -t branch-heads/6.5` to experiment with the new features in V8 v6.5. Alternatively you can [subscribe to Chrome’s Beta channel](https://www.google.com/chrome/browser/beta.html) and try the new features out yourself soon.
+Developers with an active V8 checkout can use `git checkout -b 8.4 -t branch-heads/8.4` to experiment with the new features in V8 v8.4. Alternatively you can [subscribe to Chrome’s Beta channel](https://www.google.com/chrome/browser/beta.html) and try the new features out yourself soon.

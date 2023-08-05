@@ -1,223 +1,259 @@
-Understanding the ECMAScript spec, part 1
+Understanding the ECMAScript spec, part 3
 =========================================
 
-Published 03 February 2020 · Tagged with [ECMAScript](/blog/tags/ecmascript) [Understanding ECMAScript](/blog/tags/understanding-ecmascript)
+Published 01 April 2020 · Tagged with [ECMAScript](/blog/tags/ecmascript) [Understanding ECMAScript](/blog/tags/understanding-ecmascript)
 
 [All episodes](/blog/tags/understanding-ecmascript)
 
-In this article, we take a simple function in the spec and try to understand the notation. Let’s go!
+In this episode, we’ll go deeper in the definition of the ECMAScript language and its syntax. If you’re not familiar with context-free grammars, now is a good time to check out the basics, since the spec uses context-free grammars to define the language. See [the chapter about context free grammars in "Crafting Interpreters"](https://craftinginterpreters.com/representing-code.html#context-free-grammars) for an approachable introduction or the [Wikipedia page](https://en.wikipedia.org/wiki/Context-free_grammar) for a more mathematical definition.
 
-Preface [#](#preface)
----------------------
-
-Even if you know JavaScript, reading its language specification, [ECMAScript Language specification, or the ECMAScript spec for short](https://tc39.es/ecma262/), can be pretty daunting. At least that’s how I felt when I started reading it for the first time.
-
-Let’s start with a concrete example and walk through the spec to understand it. The following code demonstrates usage of `Object.prototype.hasOwnProperty`:
-
-    const o = { foo: 1 };o.hasOwnProperty('foo'); // trueo.hasOwnProperty('bar'); // false
-
-In the example, `o` doesn’t have a property called `hasOwnProperty`, so we walk up the prototype chain and look for it. We find it in `o`’s prototype, which is `Object.prototype`.
-
-To describe how `Object.prototype.hasOwnProperty` works, the spec uses pseudocode-like descriptions:
-
-> **[`Object.prototype.hasOwnProperty(V)`](https://tc39.es/ecma262#sec-object.prototype.hasownproperty)**
-> 
-> When the `hasOwnProperty` method is called with argument `V`, the following steps are taken:
-> 
-> 1.  Let `P` be `? ToPropertyKey(V)`.
-> 2.  Let `O` be `? ToObject(this value)`.
-> 3.  Return `? HasOwnProperty(O, P)`.
-
-…and…
-
-> **[`HasOwnProperty(O, P)`](https://tc39.es/ecma262#sec-hasownproperty)**
-> 
-> The abstract operation `HasOwnProperty` is used to determine whether an object has an own property with the specified property key. A Boolean value is returned. The operation is called with arguments `O` and `P` where `O` is the object and `P` is the property key. This abstract operation performs the following steps:
-> 
-> 1.  Assert: `Type(O)` is `Object`.
-> 2.  Assert: `IsPropertyKey(P)` is `true`.
-> 3.  Let `desc` be `? O.[[GetOwnProperty]](P)`.
-> 4.  If `desc` is `undefined`, return `false`.
-> 5.  Return `true`.
-
-But what’s an “abstract operation”? What are the things inside `[[ ]]`? Why is there a `?` in front of a function? What do the asserts mean?
-
-Let’s find out!
-
-Language types and specification types [#](#language-types-and-specification-types)
------------------------------------------------------------------------------------
-
-Let’s start with something that looks familiar. The spec uses values such as `undefined`, `true`, and `false`, which we already know from JavaScript. They are all [**language values**](https://tc39.es/ecma262/#sec-ecmascript-language-types), values of **language types** which the spec also defines.
-
-The spec also uses language values internally, for example, an internal data type might contain a field whose possible values are `true` and `false`. In contrast, JavaScript engines don’t typically use language values internally. For example, if the JavaScript engine is written in C++, it would typically use the C++ `true` and `false` (and not its internal representations of the JavaScript `true` and `false`).
-
-In addition to language types, the spec also uses [**specification types**](https://tc39.es/ecma262/#sec-ecmascript-specification-types), which are types that occur only in the spec, but not in the JavaScript language. The JavaScript engine does not need to (but is free to) implement them. In this blog post, we'll get to know the specification type Record (and its subtype Completion Record).
-
-Abstract operations [#](#abstract-operations)
+ECMAScript grammars [#](#ecmascript-grammars)
 ---------------------------------------------
 
-[**Abstract operations**](https://tc39.es/ecma262/#sec-abstract-operations) are functions defined in the ECMAScript spec; they are defined for the purpose of writing the spec concisely. A JavaScript engine doesn’t have to implement them as separate functions inside the engine. They cannot be directly called from JavaScript.
+The ECMAScript spec defines four grammars:
 
-Internal slots and internal methods [#](#internal-slots-and-internal-methods)
------------------------------------------------------------------------------
+The [lexical grammar](https://tc39.es/ecma262/#sec-ecmascript-language-lexical-grammar) describes how [Unicode code points](https://en.wikipedia.org/wiki/Unicode#Architecture_and_terminology) are translated into a sequence of **input elements** (tokens, line terminators, comments, white space).
 
-[**Internal slots** and **internal methods**](https://tc39.es/ecma262/#sec-object-internal-methods-and-internal-slots) use names enclosed in `[[ ]]`.
+The [syntactic grammar](https://tc39.es/ecma262/#sec-syntactic-grammar) defines how syntactically correct programs are composed of tokens.
 
-Internal slots are data members of a JavaScript object or a specification type. They are used for storing the state of the object. Internal methods are member functions of a JavaScript object.
+The [RegExp grammar](https://tc39.es/ecma262/#sec-patterns) describes how Unicode code points are translated into regular expressions.
 
-For example, every JavaScript object has an internal slot `[[Prototype]]` and an internal method `[[GetOwnProperty]]`.
+The [numeric string grammar](https://tc39.es/ecma262/#sec-tonumber-applied-to-the-string-type) describes how Strings are translated into numeric values.
 
-Internal slots and methods are not accessible from JavaScript. For example, you cannot access `o.[[Prototype]]` or call `o.[[GetOwnProperty]]()`. A JavaScript engine can implement them for their own internal use, but doesn’t have to.
+Each grammar is defined as a context-free grammar, consisting of a set of productions.
 
-Sometimes internal methods delegate to similarly-named abstract operations, such as in the case of ordinary objects' `[[GetOwnProperty]]:`
+The grammars use slightly different notation: the syntactic grammar uses `LeftHandSideSymbol :` whereas the lexical grammar and the RegExp grammar use `LeftHandSideSymbol ::` and the numeric string grammar uses `LeftHandSideSymbol :::`.
 
-> **[`[[GetOwnProperty]](P)`](https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-getownproperty-p)**
+Next we’ll look into the lexical grammar and the syntactic grammar in more detail.
+
+Lexical grammar [#](#lexical-grammar)
+-------------------------------------
+
+The spec defines ECMAScript source text as a sequence of Unicode code points. For example, variable names are not limited to ASCII characters but can also include other Unicode characters. The spec doesn’t talk about the actual encoding (for example, UTF-8 or UTF-16). It assumes that the source code has already been converted into a sequence of Unicode code points according to the encoding it was in.
+
+It’s not possible to tokenize ECMAScript source code in advance, which makes defining the lexical grammar slightly more complicated.
+
+For example, we cannot determine whether `/` is the division operator or the start of a RegExp without looking at the larger context it occurs in:
+
+    const x = 10 / 5;
+
+Here `/` is a `DivPunctuator`.
+
+    const r = /foo/;
+
+Here the first `/` is the start of a `RegularExpressionLiteral`.
+
+Templates introduce a similar ambiguity — the interpretation of `` }` `` depends on the context it occurs in:
+
+    const what1 = 'temp';const what2 = 'late';const t = `I am a ${ what1 + what2 }`;
+
+Here `` `I am a ${ `` is `TemplateHead` and `` }` `` is a `TemplateTail`.
+
+    if (0 == 1) {}`not very useful`;
+
+Here `}` is a `RightBracePunctuator` and `` ` `` is the start of a `NoSubstitutionTemplate`.
+
+Even though the interpretation of `/` and `` }` `` depends on their “context” — their position in the syntactic structure of the code — the grammars we’ll describe next are still context-free.
+
+The lexical grammar uses several goal symbols to distinguish between the contexts where some input elements are permitted and some are not. For example, the goal symbol `InputElementDiv` is used in contexts where `/` is a division and `/=` is a division-assignment. The [`InputElementDiv`](https://tc39.es/ecma262/#prod-InputElementDiv) productions list the possible tokens which can be produced in this context:
+
+    InputElementDiv ::  WhiteSpace  LineTerminator  Comment  CommonToken  DivPunctuator  RightBracePunctuator
+
+In this context, encountering `/` produces the `DivPunctuator` input element. Producing a `RegularExpressionLiteral` is not an option here.
+
+On the other hand, [`InputElementRegExp`](https://tc39.es/ecma262/#prod-InputElementRegExp) is the goal symbol for the contexts where `/` is the beginning of a RegExp:
+
+    InputElementRegExp ::  WhiteSpace  LineTerminator  Comment  CommonToken  RightBracePunctuator  RegularExpressionLiteral
+
+As we see from the productions, it’s possible that this produces the `RegularExpressionLiteral` input element, but producing `DivPunctuator` is not possible.
+
+Similarly, there is another goal symbol, `InputElementRegExpOrTemplateTail`, for contexts where `TemplateMiddle` and `TemplateTail` are permitted, in addition to `RegularExpressionLiteral`. And finally, `InputElementTemplateTail` is the goal symbol for contexts where only `TemplateMiddle` and `TemplateTail` are permitted but `RegularExpressionLiteral` is not permitted.
+
+In implementations, the syntactic grammar analyzer (“parser”) may call the lexical grammar analyzer (“tokenizer” or “lexer”), passing the goal symbol as a parameter and asking for the next input element suitable for that goal symbol.
+
+Syntactic grammar [#](#syntactic-grammar)
+-----------------------------------------
+
+We looked into the lexical grammar, which defines how we construct tokens from Unicode code points. The syntactic grammar builds on it: it defines how syntactically correct programs are composed of tokens.
+
+### Example: Allowing legacy identifiers [#](#example%3A-allowing-legacy-identifiers)
+
+Introducing a new keyword to the grammar is a possibly breaking change — what if existing code already uses the keyword as an identifier?
+
+For example, before `await` was a keyword, someone might have written the following code:
+
+    function old() {  var await;}
+
+The ECMAScript grammar carefully added the `await` keyword in such a way that this code continues to work. Inside async functions, `await` is a keyword, so this doesn’t work:
+
+    async function modern() {  var await; // Syntax error}
+
+Allowing `yield` as an identifier in non-generators and disallowing it in generators works similarly.
+
+Understanding how `await` is allowed as an identifier requires understanding ECMAScript-specific syntactic grammar notation. Let’s dive right in!
+
+### Productions and shorthands [#](#productions-and-shorthands)
+
+Let’s look at how the productions for [`VariableStatement`](https://tc39.es/ecma262/#prod-VariableStatement) are defined. At the first glance, the grammar can look a bit scary:
+
+    VariableStatement[Yield, Await] :  var VariableDeclarationList[+In, ?Yield, ?Await] ;
+
+What do the subscripts (`[Yield, Await]`) and prefixes (`+` in `+In` and `?` in `?Async`) mean?
+
+The notation is explained in the section [Grammar Notation](https://tc39.es/ecma262/#sec-grammar-notation).
+
+The subscripts are a shorthand for expressing a set of productions, for a set of left-hand side symbols, all at once. The left-hand side symbol has two parameters, which expands into four "real" left-hand side symbols: `VariableStatement`, `VariableStatement_Yield`, `VariableStatement_Await`, and `VariableStatement_Yield_Await`.
+
+Note that here the plain `VariableStatement` means “`VariableStatement` without `_Await` and `_Yield`”. It should not be confused with `VariableStatement[Yield, Await]`.
+
+On the right-hand side of the production, we see the shorthand `+In`, meaning "use the version with `_In`", and `?Await`, meaning “use the version with `_Await` if and only if the left-hand side symbol has `_Await`” (similarly with `?Yield`).
+
+The third shorthand, `~Foo`, meaning “use the version without `_Foo`”, is not used in this production.
+
+With this information, we can expand the productions like this:
+
+    VariableStatement :  var VariableDeclarationList_In ;VariableStatement_Yield :  var VariableDeclarationList_In_Yield ;VariableStatement_Await :  var VariableDeclarationList_In_Await ;VariableStatement_Yield_Await :  var VariableDeclarationList_In_Yield_Await ;
+
+Ultimately, we need to find out two things:
+
+1.  Where is it decided whether we’re in the case with `_Await` or without `_Await`?
+2.  Where does it make a difference — where do the productions for `Something_Await` and `Something` (without `_Await`) diverge?
+
+### `_Await` or no `_Await`? [#](#_await-or-no-_await%3F)
+
+Let’s tackle question 1 first. It’s somewhat easy to guess that non-async functions and async functions differ in whether we pick the parameter `_Await` for the function body or not. Reading the productions for async function declarations, we find [this](https://tc39.es/ecma262/#prod-AsyncFunctionBody):
+
+    AsyncFunctionBody :  FunctionBody[~Yield, +Await]
+
+Note that `AsyncFunctionBody` has no parameters — they get added to the `FunctionBody` on the right-hand side.
+
+If we expand this production, we get:
+
+    AsyncFunctionBody :  FunctionBody_Await
+
+In other words, async functions have `FunctionBody_Await`, meaning a function body where `await` is treated as a keyword.
+
+On the other hand, if we’re inside a non-async function, [the relevant production](https://tc39.es/ecma262/#prod-FunctionDeclaration) is:
+
+    FunctionDeclaration[Yield, Await, Default] :  function BindingIdentifier[?Yield, ?Await] ( FormalParameters[~Yield, ~Await] ) { FunctionBody[~Yield, ~Await] }
+
+(`FunctionDeclaration` has another production, but it’s not relevant for our code example.)
+
+To avoid combinatorial expansion, let’s ignore the `Default` parameter which is not used in this particular production.
+
+The expanded form of the production is:
+
+    FunctionDeclaration :  function BindingIdentifier ( FormalParameters ) { FunctionBody }FunctionDeclaration_Yield :  function BindingIdentifier_Yield ( FormalParameters ) { FunctionBody }FunctionDeclaration_Await :  function BindingIdentifier_Await ( FormalParameters ) { FunctionBody }FunctionDeclaration_Yield_Await :  function BindingIdentifier_Yield_Await ( FormalParameters ) { FunctionBody }
+
+In this production we always get `FunctionBody` and `FormalParameters` (without `_Yield` and without `_Await`), since they are parameterized with `[~Yield, ~Await]` in the non-expanded production.
+
+Function name is treated differently: it gets the parameters `_Await` and `_Yield` if the left-hand side symbol has them.
+
+To summarize: Async functions have a `FunctionBody_Await` and non-async functions have a `FunctionBody` (without `_Await`). Since we’re talking about non-generator functions, both our async example function and our non-async example function are parameterized without `_Yield`.
+
+Maybe it’s hard to remember which one is `FunctionBody` and which `FunctionBody_Await`. Is `FunctionBody_Await` for a function where `await` is an identifier, or for a function where `await` is a keyword?
+
+You can think of the `_Await` parameter meaning "`await` is a keyword". This approach is also future proof. Imagine a new keyword, `blob` being added, but only inside "blobby" functions. Non-blobby non-async non-generators would still have `FunctionBody` (without `_Await`, `_Yield` or `_Blob`), exactly like they have now. Blobby functions would have a `FunctionBody_Blob`, async blobby functions would have `FunctionBody_Await_Blob` and so on. We’d still need to add the `Blob` subscript to the productions, but the expanded forms of `FunctionBody` for already existing functions stay the same.
+
+### Disallowing `await` as an identifier [#](#disallowing-await-as-an-identifier)
+
+Next, we need to find out how `await` is disallowed as an identifier if we're inside a `FunctionBody_Await`.
+
+We can follow the productions further to see that the `_Await` parameter gets carried unchanged from `FunctionBody` all the way to the `VariableStatement` production we were previously looking at.
+
+Thus, inside an async function, we’ll have a `VariableStatement_Await` and inside a non-async function, we’ll have a `VariableStatement`.
+
+We can follow the productions further and keep track of the parameters. We already saw the productions for [`VariableStatement`](https://tc39.es/ecma262/#prod-VariableStatement):
+
+    VariableStatement[Yield, Await] :  var VariableDeclarationList[+In, ?Yield, ?Await] ;
+
+All productions for [`VariableDeclarationList`](https://tc39.es/ecma262/#prod-VariableDeclarationList) just carry the parameters on as is:
+
+    VariableDeclarationList[In, Yield, Await] :  VariableDeclaration[?In, ?Yield, ?Await]
+
+(Here we show only the [production](https://tc39.es/ecma262/#prod-VariableDeclaration) relevant to our example.)
+
+    VariableDeclaration[In, Yield, Await] :  BindingIdentifier[?Yield, ?Await] Initializer[?In, ?Yield, ?Await] opt
+
+The `opt` shorthand means that the right-hand side symbol is optional; there are in fact two productions, one with the optional symbol, and one without.
+
+In the simple case relevant to our example, `VariableStatement` consists of the keyword `var`, followed by a single `BindingIdentifier` without an initializer, and ending with a semicolon.
+
+To disallow or allow `await` as a `BindingIdentifier`, we hope to end up with something like this:
+
+    BindingIdentifier_Await :  Identifier  yieldBindingIdentifier :  Identifier  yield  await
+
+This would disallow `await` as an identifier inside async functions and allow it as an identifier inside non-async functions.
+
+But the spec doesn’t define it like this, instead we find this [production](https://tc39.es/ecma262/#prod-BindingIdentifier):
+
+    BindingIdentifier[Yield, Await] :  Identifier  yield  await
+
+Expanded, this means the following productions:
+
+    BindingIdentifier_Await :  Identifier  yield  awaitBindingIdentifier :  Identifier  yield  await
+
+(We’re omitting the productions for `BindingIdentifier_Yield` and `BindingIdentifier_Yield_Await` which are not needed in our example.)
+
+This looks like `await` and `yield` would be always allowed as identifiers. What’s up with that? Is the whole blog post for nothing?
+
+### Statics semantics to the rescue [#](#statics-semantics-to-the-rescue)
+
+It turns out that **static semantics** are needed for forbidding `await` as an identifier inside async functions.
+
+Static semantics describe static rules — that is, rules that are checked before the program runs.
+
+In this case, the [static semantics for `BindingIdentifier`](https://tc39.es/ecma262/#sec-identifiers-static-semantics-early-errors) define the following syntax-directed rule:
+
+>     BindingIdentifier[Yield, Await] : await
 > 
-> When the `[[GetOwnProperty]]` internal method of `O` is called with property key `P`, the following steps are taken:
+> It is a Syntax Error if this production has an `[Await]` parameter.
+
+Effectively, this forbids the `BindingIdentifier_Await : await` production.
+
+The spec explains that the reason for having this production but defining it as a Syntax Error by the static semantics is because of interference with automatic semicolon insertion (ASI).
+
+Remember that ASI kicks in when we’re unable to parse a line of code according to the grammar productions. ASI tries to add semicolons to satisfy the requirement that statements and declarations must end with a semicolon. (We’ll describe ASI in more detail in a later episode.)
+
+Consider the following code (example from the spec):
+
+    async function too_few_semicolons() {  let  await 0;}
+
+If the grammar disallowed `await` as an identifier, ASI would kick in and transform the code into the following grammatically correct code, which also uses `let` as an identifier:
+
+    async function too_few_semicolons() {  let;  await 0;}
+
+This kind of interference with ASI was deemed too confusing, so static semantics were used for disallowing `await` as an identifier.
+
+### Disallowed `StringValues` of identifiers [#](#disallowed-stringvalues-of-identifiers)
+
+There’s also another related rule:
+
+>     BindingIdentifier : Identifier
 > 
-> 1.  Return `! OrdinaryGetOwnProperty(O, P)`.
+> It is a Syntax Error if this production has an `[Await]` parameter and `StringValue` of `Identifier` is `"await"`.
 
-(We’ll find out what the exclamation mark means in the next chapter.)
+This might be confusing at first. [`Identifier`](https://tc39.es/ecma262/#prod-Identifier) is defined like this:
 
-`OrdinaryGetOwnProperty` is not an internal method, since it’s not associated with any object; instead, the object it operates on is passed as a parameter.
+    Identifier :  IdentifierName but not ReservedWord
 
-`OrdinaryGetOwnProperty` is called “ordinary” since it operates on ordinary objects. ECMAScript objects can be either **ordinary** or **exotic**. Ordinary objects must have the default behavior for a set of methods called **essential internal methods**. If an object deviates from the default behavior, it’s exotic.
+`await` is a `ReservedWord`, so how can an `Identifier` ever be `await`?
 
-The most well-known exotic object is the `Array`, since its length property behaves in a non-default way: setting the `length` property can remove elements from the `Array`.
+As it turns out, `Identifier` cannot be `await`, but it can be something else whose `StringValue` is `"await"` — a different representation of the character sequence `await`.
 
-Essential internal methods are the methods listed [here](https://tc39.es/ecma262/#table-5).
+[Static semantics for identifier names](https://tc39.es/ecma262/#sec-identifier-names-static-semantics-stringvalue) define how the `StringValue` of an identifier name is computed. For example, the Unicode escape sequence for `a` is `\u0061`, so `\u0061wait` has the `StringValue` `"await"`. `\u0061wait` won’t be recognized as a keyword by the lexical grammar, instead it will be an `Identifier`. The static semantics for forbid using it as a variable name inside async functions.
 
-Completion records [#](#completion-records)
--------------------------------------------
+So this works:
 
-What about the question marks and exclamation marks? To understand them, we need to look into [**Completion Records**](https://tc39.es/ecma262/#sec-completion-record-specification-type)!
+    function old() {  var \u0061wait;}
 
-Completion Record is a specification type (only defined for spec purposes). A JavaScript engine doesn’t have to have a corresponding internal data type.
+And this doesn’t:
 
-A Completion Record is a “record” — a data type which has a fixed set of named fields. A Completion Record has three fields:
-
-Name
-
-Description
-
-`[[Type]]`
-
-One of: `normal`, `break`, `continue`, `return`, or `throw`. All other types except `normal` are **abrupt completions**.
-
-`[[Value]]`
-
-The value that was produced when the completion occurred, for example, the return value of a function or the exception (if one is thrown).
-
-`[[Target]]`
-
-Used for directed control transfers (not relevant for this blog post).
-
-Every abstract operation implicitly returns a Completion Record. Even if it looks like an abstract operation would return a simple type such as Boolean, it’s implicitly wrapped into a Completion Record with the type `normal` (see [Implicit Completion Values](https://tc39.es/ecma262/#sec-implicit-completion-values)).
-
-Note 1: The spec is not fully consistent in this regard; there are some helper functions which return bare values and whose return values are used as is, without extracting the value from the Completion Record. This is usually clear from the context.
-
-Note 2: The spec editors are looking into making the Completion Record handling more explicit.
-
-If an algorithm throws an exception, it means returning a Completion Record with `[[Type]]` `throw` whose `[[Value]]` is the exception object. We’ll ignore the `break`, `continue` and `return` types for now.
-
-[`ReturnIfAbrupt(argument)`](https://tc39.es/ecma262/#sec-returnifabrupt) means taking the following steps:
-
-> 1.  If `argument` is abrupt, return `argument`
-> 2.  Set `argument` to `argument.[[Value]]`.
-
-That is, we inspect a Completion Record; if it’s an abrupt completion, we return immediately. Otherwise, we extract the value from the Completion Record.
-
-`ReturnIfAbrupt` might look like a function call, but it’s not. It causes the function where `ReturnIfAbrupt()` occurs to return, not the `ReturnIfAbrupt` function itself. It behaves more like a macro in C-like languages.
-
-`ReturnIfAbrupt` can be used like this:
-
-> 1.  Let `obj` be `Foo()`. (`obj` is a Completion Record.)
-> 2.  `ReturnIfAbrupt(obj)`.
-> 3.  `Bar(obj)`. (If we’re still here, `obj` is the value extracted from the Completion Record.)
-
-And now [the question mark](https://tc39.es/ecma262/#sec-returnifabrupt-shorthands) comes into play: `? Foo()` is equivalent to `ReturnIfAbrupt(Foo())`. Using a shorthand is practical: we don’t need to write the error handling code explicitly each time.
-
-Similarly, `Let val be ! Foo()` is equivalent to:
-
-> 1.  Let `val` be `Foo()`.
-> 2.  Assert: `val` is not an abrupt completion.
-> 3.  Set `val` to `val.[[Value]]`.
-
-Using this knowledge, we can rewrite `Object.prototype.hasOwnProperty` like this:
-
-> **`Object.prototype.hasOwnProperty(V)`**
-> 
-> 1.  Let `P` be `ToPropertyKey(V)`.
-> 2.  If `P` is an abrupt completion, return `P`
-> 3.  Set `P` to `P.[[Value]]`
-> 4.  Let `O` be `ToObject(this value)`.
-> 5.  If `O` is an abrupt completion, return `O`
-> 6.  Set `O` to `O.[[Value]]`
-> 7.  Let `temp` be `HasOwnProperty(O, P)`.
-> 8.  If `temp` is an abrupt completion, return `temp`
-> 9.  Let `temp` be `temp.[[Value]]`
-> 10.  Return `NormalCompletion(temp)`
-
-…and we can rewrite `HasOwnProperty` like this:
-
-> **`HasOwnProperty(O, P)`**
-> 
-> 1.  Assert: `Type(O)` is `Object`.
-> 2.  Assert: `IsPropertyKey(P)` is `true`.
-> 3.  Let `desc` be `O.[[GetOwnProperty]](P)`.
-> 4.  If `desc` is an abrupt completion, return `desc`
-> 5.  Set `desc` to `desc.[[Value]]`
-> 6.  If `desc` is `undefined`, return `NormalCompletion(false)`.
-> 7.  Return `NormalCompletion(true)`.
-
-We can also rewrite the `[[GetOwnProperty]]` internal method without the exclamation mark:
-
-> **`O.[[GetOwnProperty]]`**
-> 
-> 1.  Let `temp` be `OrdinaryGetOwnProperty(O, P)`.
-> 2.  Assert: `temp` is not an abrupt completion.
-> 3.  Let `temp` be `temp.[[Value]]`.
-> 4.  Return `NormalCompletion(temp)`.
-
-Here we assume that `temp` is a brand new temporary variable which doesn’t collide with anything else.
-
-We’ve also used the knowledge that when a return statement returns something else than a Completion Record, it’s implicitly wrapped inside a `NormalCompletion`.
-
-### Side track: `Return ? Foo()` [#](#side-track%3A-return-%3F-foo())
-
-The spec uses the notation `Return ? Foo()` — why the question mark?
-
-`Return ? Foo()` expands to:
-
-> 1.  Let `temp` be `Foo()`.
-> 2.  If `temp` is an abrupt completion, return `temp`.
-> 3.  Set `temp` to `temp.[[Value]]`.
-> 4.  Return `NormalCompletion(temp)`.
-
-Which is the same as `Return Foo()`; it behaves the same way for both abrupt and normal completions.
-
-`Return ? Foo()` is only used for editorial reasons, to make it more explicit that `Foo` returns a Completion Record.
-
-Asserts [#](#asserts)
----------------------
-
-Asserts in the spec assert invariant conditions of the algorithms. They are added for clarity, but don't add any requirements to the implementation — the implementation doesn’t need to check them.
-
-Moving on [#](#moving-on)
--------------------------
-
-The abstract operations delegate to other abstract operations (see picture below), but based on this blog post we should be able to figure out what they do. We’ll encounter Property Descriptors, which is just another specification type.
-
-![](/_img/understanding-ecmascript-part-1/call-graph.svg)
-
-Function call graph starting from `Object.prototype.hasOwnProperty`
+    async function modern() {  var \u0061wait; // Syntax error}
 
 Summary [#](#summary)
 ---------------------
 
-We read through a simple method — `Object.prototype.hasOwnProperty` — and **abstract operations** it invokes. We familiarized ourselves with the shorthands `?` and `!` related to error handling. We encountered **language types**, **specification types**, **internal slots**, and **internal methods**.
+In this episode, we familiarized ourselves with the lexical grammar, the syntactic grammar, and the shorthands used for defining the syntactic grammar. As an example, we looked into forbidding using `await` as an identifier inside async functions but allowing it inside non-async functions.
 
-Useful links [#](#useful-links)
--------------------------------
-
-[How to Read the ECMAScript Specification](https://timothygu.me/es-howto/): a tutorial which covers much of the material covered in this post, from a slightly different angle.
+Other interesting parts of the syntactic grammar, such as automatic semicolon insertion and cover grammars will be covered in a later episode. Stay tuned!
