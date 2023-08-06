@@ -1,86 +1,82 @@
 <template>
-  <div class="home">
-    <h1 class="headline center">v-m-blog</h1>
-    <img alt="Vue logo" src="../assets/vue.svg">
-    <div class="sections">
-        <h2 class="center">{{section}}</h2>
-        <div class="section" v-for="entry in entries" :key="entry.id">
-          <div class="entry">
-            <router-link :to="{ name: entry.id}">
-              {{entry.name}}
-              <span class="subtitle">{{entry.date}}</span>
-            </router-link>
-            <p>{{entry.description}}</p>
-          </div>
-        </div>
-    </div>
-  </div>
+  <v-container>
+    <v-row justify="center">
+  <v-card
+    class="mx-auto"
+  >
+    <v-list
+      :items="entries"
+      item-props
+      lines="three"
+      density="comfortable"
+
+    >
+      <template v-slot:tag="{ tag }">
+        <div v-html="tag"></div>
+      </template>
+
+    </v-list>
+  </v-card>
+  </v-row>
+  </v-container>
+
 </template>
 
 <script>
 import BLOGENTRIES from '../blog_store/posts_index.json'
-
-export default {
-  name: 'blog',
-  computed: {
-    entries() {
+  export default {
+    data: () => ({
+      items: [
+        { type: 'subheader', title: 'Today' },
+        {
+          title: 'Brunch this weekend?',
+          tag:'test',
+          subtitle: `<span class="text-primary">Ali Connors</span> &mdash; I'll be in your neighborhood doing errands this weekend. Do you want to hang out?`,
+        },
+        { type: 'divider', inset: true },
+        {
+          tag:'test',
+          color: 'red',
+          title: 'Summer BBQ',
+          subtitle: `<span class="text-primary">to Alex, Scott, Jennifer</span> &mdash; Wish I could come, but I'm out of town this weekend.`,
+        },
+        { type: 'divider', inset: true },
+        {
+          title: 'Oui oui',
+          tag:'test',
+          subtitle: '<span class="text-primary">Sandra Adams</span> &mdash; Do you have Paris recommendations? Have you ever been?',
+        },
+        { type: 'divider', inset: true },
+        {
+          title: 'Birthday gift',
+          tag:'test',
+          subtitle: '<span class="text-primary">Trevor Hansen</span> &mdash; Have any ideas about what we should get Heidi for her birthday?',
+        },
+        { type: 'divider', inset: true },
+        {
+          title: 'Recipe to try',
+          tag:'test',
+          subtitle: '<span class="text-primary">Britta Holt</span> &mdash; We should eat this: Grate, Squash, Corn, and tomatillo Tacos.',
+        },
+      ],
+    }),
+    computed:{
+      entries() {
       return BLOGENTRIES
     }
+    }
   }
-}
 </script>
-<style lang="scss" scoped>
-.center {
-  text-align: center;
-}
-.headline {
-  text-transform: uppercase;
-  margin: 4rem auto;
-  font-size: 4rem;
-}
-img {
-  display: block;
-  margin: 0 auto;
-  width: 150px;
+
+<style>
+.v-list__tile__content{
+    justify-content: center!important;
+    flex-direction: row!important;
+    text-align: center!important;
+    align-items: center!important;
 }
 
-h2 {
-  color: #35495e;
-  text-transform: capitalize;
-  margin-bottom: 2rem;
+.v-list__tile__title, .v-list__tile__sub-title {
+    text-align: center!important;
 }
-
-h3 {
-  color: #42b883;
-  margin-bottom: 0;
-  cursor: pointer;
-  &:hover {
-    text-decoration: underline;
-  }
-  .subtitle {
-    color: grey;
-    font-size: .98rem;
-    float: right;
-    font-weight: normal;
-  }
-}
-
-p {
-  margin-top: .4rem;
-}
-
-.sections {
-  max-width: 40vw;
-  margin: 0 auto;
-  margin-top: 4rem;
-}
-
-.section {
-  margin-bottom: 3rem;
-}
-
-.group {
-  margin-bottom: 4rem;
-}
-
 </style>

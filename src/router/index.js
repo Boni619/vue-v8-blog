@@ -11,7 +11,9 @@ const routes = [
     name: child.id,
     component: BlogDescription,
     meta: {
-      markdownComponent: defineAsyncComponent(() => import('../blog_store/posts/'+child.tag+'/'+child.id+'.md'))
+      markdownComponent: defineAsyncComponent(() => import('../blog_store/posts/' + child.tag + '/' + child.id + '.md')),
+      tag: child.tag,
+      id: child.id
     },
   }
   )),

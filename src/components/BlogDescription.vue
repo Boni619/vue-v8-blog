@@ -1,54 +1,25 @@
 <template>
-   <div class="blog">
-    <AsyncMarkdown />
-    <router-link to="/"  class="back">&laquo; Back</router-link>
-  </div>
+  <v-container>
+    <v-row justify="space-around">
+      <v-card>
+        <v-btn icon="mdi-arrow-left"  to="/"></v-btn>
+        <v-card-text>
+          <AsyncMarkdown/>
+        </v-card-text>
+      </v-card>
+    </v-row>
+  </v-container>
 </template>
 
-<style>
-.blog {
-	 max-width: 50vw;
-	 margin: 10rem auto;
-}
- blog .back {
-	 background-color: #42b883;
-	 color: white;
-	 margin-top: 5rem;
-	 text-decoration: none;
-	 padding: 10px 15px;
-	 border: 1px solid currentColor;
-	 border-radius: 0.5rem;
-	 display: inline-block;
-	 transition: all 0.3s ease;
-}
- blog .back:hover {
-	 background-color: transparent;
-	 color: #42b883;
-}
- blog  h1 {
-	 font-size: 3rem;
-	 margin-bottom: 0.2rem;
-	 color: #42b883;
-}
- blog h4 {
-	 margin-bottom: 3rem;
-	 color: #35495e;
-}
- blog pre {
-	 overflow-x: auto;
-	 background-color: #35495e;
-	 color: white;
-	 border-radius: 0.3rem;
-	 padding: 1rem;
-}
- blog img {
-	 max-width: 100%;
-}
-
-</style>
-
-<script setup lang="ts">
+<script setup>
 import { useRoute } from 'vue-router';
 const route = useRoute()
 const AsyncMarkdown = route.meta.markdownComponent
+
 </script>
+
+<style>
+h1,h2 {
+  margin: 2vh;
+}
+</style>
