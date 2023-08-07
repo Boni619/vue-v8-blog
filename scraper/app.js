@@ -25,24 +25,24 @@ async function scrapeData() {
     const listItems = $("#main ol li");
     const blogData = [];
     listItems.each((idx, el) => {
-      const blog = { id: "" ,name: "", date: "", tags: [],href: "",url: "",tag:''};
+      const blog = { id: "" ,title: "", date: "", tags: [],postUrl: "",to: "",tag:''};
       let name =  $(el).children("a").text().split('.').join("");
-      blog.name = name;
+      blog.title = name;
       blog.date = $(el).children("time").text();
       $(el).children("a").each((i, tagEl) => {
         const href = $(tagEl).attr("href");
         const hasTagClass = $(tagEl).hasClass("tag");
         if (!hasTagClass) {
-          blog.href = href;
+          blog.postUrl = href;
         } else {
           blog.tags.push($(tagEl).text());
         }
       });
 
       const folderName = titleNameGenerator(blog.tags[0]);
-      const postId = titleNameGenerator(blog.name);
+      const postId = titleNameGenerator(name);
       blog.tag = folderName;
-      blog.url = `blog_store/posts/${folderName}/${postId}.md`;
+      blog.to = `blog/${postId}`;
       blog.id = postId;
       blogData.push(blog);
     });
@@ -55,7 +55,7 @@ async function scrapeData() {
       fs.mkdirSync(`.././src/blog_store/posts//${folderName}`, { recursive: true });
 
       countriesWithTag.forEach((blog) => {
-        scrapBlogData(blog.href,blog.id,folderName);
+        scrapBlogData(blog.postUrl,blog.id,folderName);
       });
     }
     const jsonFilePath = path.join(__dirname, "..", "src", "blog_store","posts_index.json");
