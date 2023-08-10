@@ -6,27 +6,8 @@
 
   <v-card-title>{{entrie.title}}</v-card-title>
   <v-card-subtitle>Tadit Dash is an Indian by heart, a Software Engineer by profession, an Author and a Speaker by passion.</v-card-subtitle>
-
   <v-card-actions>
-        <v-btn icon>
-          <v-icon>mdi-web</v-icon>
-          <v-icon>mdi-twitter</v-icon>
-          <v-icon>mdi-twitter</v-icon>
-          <v-icon>mdi-twitter</v-icon>
-        </v-btn>
-        <v-btn icon>
-          <v-icon>mdi-twitter</v-icon>
-        </v-btn>
-        <v-btn icon>
-          <v-icon>mdi-linkedin</v-icon>
-        </v-btn>
-        <v-btn icon>
-          <v-icon>mdi-facebook</v-icon>
-        </v-btn>
-        <v-btn icon>
-          <v-icon>mdi-instagram</v-icon>
-        </v-btn>
-      </v-card-actions>
+  </v-card-actions>
   </v-card>
   </v-row>
   </v-container>
