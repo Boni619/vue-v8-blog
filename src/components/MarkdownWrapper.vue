@@ -3,7 +3,7 @@
     <v-row justify="space-around">
       <v-card>
         <v-card-text>
-          <markdownComponent/>
+          <markdownComponent />
         </v-card-text>
       </v-card>
       <router-link to="/" class="back">&laquo; Back</router-link>
